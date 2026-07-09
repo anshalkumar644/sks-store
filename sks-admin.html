@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SKS Store | Admin Dashboard</title>
+    
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
+
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: system-ui, -apple-system, sans-serif; }
+        body { background-color: #f8fafc; color: #0f172a; padding: 2rem 5%; }
+        header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; border-bottom: 2px solid #e2e8f0; padding-bottom: 1rem; }
+        .live-indicator { background: #bbf7d0; color: #16a34a; padding: 0.3rem 0.8rem; border-radius: 20px; font-size: 0.85rem; font-weight: bold; animation: blink 1.5s infinite; }
+        @keyframes blink { 0% { opacity: 0.5; } 50% { opacity: 1; } 100% { opacity: 0.5; } }
+        
+        .dashboard-grid { display: grid; grid-template-columns: 1fr; gap: 1.5rem; }
+        .order-card { background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 1.5rem; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); }
+        .order-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+        .order-id { font-weight: bold; color: #2874f0; font-size: 1.2rem; }
+        .order-time { font-size: 0.85rem; color: #64748b; }
+        
+        .cust-details { background: #f1f5f9; padding: 0.8rem; border-radius: 6px; margin-bottom: 1rem; font-size: 0.95rem; }
+        .items-list { margin-left: 1.2rem; margin-bottom: 1rem; }
+        .footer-row { display: flex; justify-content: space-between; align-items: center; font-weight: bold; border-top: 1px dashed #cbd5e1; padding-top: 1rem; }
+        .total-price { color: #16a34a; font-size: 1.2rem; }
+        
+        .status-select { padding: 0.4rem; border-radius: 4px; border: 1px solid #cbd5e1; font-weight: 600; }
+        .status-placed { background: #dbeafe; color: #1e40af; }
+        .status-done { background: #dcfce7; color: #166534; }
+        #no-orders-msg { text-align: center; color: #64748b; font-size: 1.2rem; margin-top: 3rem; }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div>
+            <h2>📦 SKS Online Seller Dashboard</h2>
+            <p style="color: #64748b; font-size: 0.9rem;">Manage and Track Live Customer Orders</p>
+        </div>
+        <div class="live-indicator">● LIVE SYNC ACTIVE</div>
+    </header>
+
+    <audio id="notification-sound" src="https://assets.mixkit.co/active_storage/sfx/2869/2869-500.wav" preload="auto"></audio>
+    <div id="no-orders-msg">Waiting for incoming cloud sync data...</div>
+    <div id="orders-container" class="dashboard-grid"></div>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyCy9rU1T-L7viJOTcbB-YyoKeprDywPCTw",
+            databaseURL: "https://sks-online-d8e4c-default-rtdb.firebaseio.com",
+            projectId: "sks-online-d8e4c"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+
+        const ordersContainer = document.getElementById('orders-container');
+        const noOrdersMsg = document.getElementById('no-orders-msg');
+        const alertSound = document.getElementById('notification-sound');
+        let initialLoadDone = false;
+
+        database.ref('orders').on('value', (snapshot) => {
+            const ordersData = snapshot.val();
+            if (!ordersData) { ordersContainer.innerHTML = ''; noOrdersMsg.style.display = 'block'; return; }
+
+            noOrdersMsg.style.display = 'none'; ordersContainer.innerHTML = '';
+            const sortedIds = Object.keys(ordersData).reverse();
+
+            sortedIds.forEach(id => {
+                const order = ordersData[id];
+                let itemsHtml = "";
+                order.Items.forEach(item => { itemsHtml += `<li>${item.name} - <strong>${item.qty} pcs</strong> (₹${item.price})</li>`; });
+
+                const isCompleted = order.Status === "Delivered" ? "status-done" : "status-placed";
+                ordersContainer.innerHTML += `
+                    <div class="order-card">
+                        <div class="order-header">
+                            <span class="order-id">#${order.OrderId}</span>
+                            <span class="order-time">🕒 ${order.Time}</span>
+                        </div>
+                        <div class="cust-details">
+                            <p><strong>Grahak:</strong> ${order.CustomerName} (ID: ${order.CustomerId})</p>
+                            <p><strong>Mobile:</strong> ${order.Phone}</p>
+                            <p><strong>Address:</strong> ${order.Address}</p>
+                        </div>
+                        <ul class="items-list">${itemsHtml}</ul>
+                        <div class="footer-row">
+                            <div>Total: <span class="total-price">₹${order.GrandTotal}</span></div>
+                            <div>
+                                <select class="status-select ${isCompleted}" onchange="updateStatus('${order.OrderId}', this.value)">
+                                    <option value="Order Placed Successfully" ${order.Status !== 'Delivered' ? 'selected' : ''}>Pending Delivery</option>
+                                    <option value="Delivered" ${order.Status === 'Delivered' ? 'selected' : ''}>✅ Delivered</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            if (initialLoadDone) { alertSound.play().catch(e => {}); }
+            initialLoadDone = true;
+        });
+
+        function updateStatus(orderId, newStatus) {
+            database.ref('orders/' + orderId).update({ Status: newStatus });
+        }
+    </script>
+</body>
+</html>
